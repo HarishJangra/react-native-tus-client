@@ -112,6 +112,7 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
     private TusAndroidUpload upload;
     private TusUploader uploader;
     private String uploadId;
+    private String uploadEndPoint;
     private TusClient client;
     private boolean shouldFinish;
     private boolean isRunning;
@@ -119,9 +120,10 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
     public TusRunnable(String fileUrl, String uploadId, String endpoint, Map<String, String> metadata,
         Map<String, String> headers) throws FileNotFoundException, MalformedURLException {
       this.uploadId = uploadId;
+      this.uploadEndPoint = endpoint;
 
       client = new TusClient();
-      client.setUploadCreationURL(new URL(endpoint));
+      // client.setUploadCreationURL(new URL(endpoint));
 
       SharedPreferences pref = reactContext.getSharedPreferences("tus", 0);
 
@@ -136,7 +138,9 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
     }
 
     protected void makeAttempt() throws ProtocolException, IOException {
-      uploader = client.resumeOrCreateUpload(upload);
+      // uploader = client.resumeOrCreateUpload(upload);
+      uploader = client.beginOrResumeUploadFromURL(upload, new URL(uploadEndPoint));
+
       uploader.setChunkSize(1024);
       uploader.setRequestPayloadSize(10 * 1024 * 1024);
 
@@ -149,7 +153,8 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
         }
       }, 0, 500);
 
-      do {} while (uploader.uploadChunk() > -1 && !shouldFinish);
+      do {
+      } while (uploader.uploadChunk() > -1 && !shouldFinish);
 
       sendProgressEvent(upload.getSize(), upload.getSize());
 
