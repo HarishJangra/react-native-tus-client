@@ -149,8 +149,6 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
         long bytesUploaded = uploader.getOffset();        
         sendProgressEvent(bytesUploaded, totalBytes);
 
-        reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                .emit(ON_PROGRESS, params);
       }while(uploader.uploadChunk() > -1 && !shouldFinish);
 
       Timer progressTicker = new Timer();
