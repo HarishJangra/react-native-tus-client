@@ -147,7 +147,7 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
       do {
         long totalBytes = upload.getSize();
         long bytesUploaded = uploader.getOffset();        
-        sendProgressEvent(bytesUploaded, totalBytes);
+        sendProgressEvent( totalBytes,bytesUploaded);
 
       }while(uploader.uploadChunk() > -1 && !shouldFinish);
 
