@@ -151,21 +151,21 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
 
       }while(uploader.uploadChunk() > -1 && !shouldFinish);
 
-      Timer progressTicker = new Timer();
+      // Timer progressTicker = new Timer();
 
-      progressTicker.scheduleAtFixedRate(new TimerTask() {
-        @Override
-        public void run() {
-          sendProgressEvent(upload.getSize(), uploader.getOffset());
-        }
-      }, 0, 500);
+      // progressTicker.scheduleAtFixedRate(new TimerTask() {
+      //   @Override
+      //   public void run() {
+      //     sendProgressEvent(upload.getSize(), uploader.getOffset());
+      //   }
+      // }, 0, 500);
 
-      do {
-      } while (uploader.uploadChunk() > -1 && !shouldFinish);
+      // do {
+      // } while (uploader.uploadChunk() > -1 && !shouldFinish);
 
-      sendProgressEvent(upload.getSize(), upload.getSize());
+      // sendProgressEvent(upload.getSize(), upload.getSize());
 
-      progressTicker.cancel();
+      // progressTicker.cancel();
       uploader.finish();
     }
 
