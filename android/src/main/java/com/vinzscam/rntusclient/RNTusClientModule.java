@@ -36,8 +36,10 @@ import io.tus.java.client.ProtocolException;
 import io.tus.java.client.TusClient;
 import io.tus.java.client.TusExecutor;
 import io.tus.java.client.TusUploader;
+import android.util.Log;
 
 public class RNTusClientModule extends ReactContextBaseJavaModule {
+  private static final String TAG = "RNTUS";
 
   private final String ON_ERROR = "onError";
   private final String ON_SUCCESS = "onSuccess";
@@ -78,6 +80,8 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
       String uploadId = UUID.randomUUID().toString();
       TusRunnable executor = new TusRunnable(fileUrl, uploadId, endpoint, metadata, headers);
       this.executorsMap.put(uploadId, executor);
+      Log.d(TAG, "CREATE UPLOAD " + uploadId);
+
       callback.invoke(uploadId);
     } catch (FileNotFoundException | MalformedURLException e) {
       callback.invoke((Object) null, e.getMessage());
@@ -88,13 +92,15 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
   public void resume(String uploadId, Callback callback) {
     TusRunnable executor = this.executorsMap.get(uploadId);
     if (executor != null) {
+      Log.d(TAG, "on resume upload");
+
       pool.submit(executor);
       callback.invoke(true);
     } else {
       callback.invoke(false);
     }
   }
-
+  
   @ReactMethod
   public void abort(String uploadId, Callback callback) {
     try {
@@ -116,11 +122,15 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
     private TusClient client;
     private boolean shouldFinish;
     private boolean isRunning;
+    private Map<String, String> headers;
+    private Timer progressTicker;
+    private long offset = 0;
 
     public TusRunnable(String fileUrl, String uploadId, String endpoint, Map<String, String> metadata,
         Map<String, String> headers) throws FileNotFoundException, MalformedURLException {
       this.uploadId = uploadId;
       this.uploadEndPoint = endpoint;
+      this.headers = headers;
 
       client = new TusClient();
       // client.setUploadCreationURL(new URL(endpoint));
@@ -128,10 +138,11 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
       SharedPreferences pref = reactContext.getSharedPreferences("tus", 0);
 
       client.enableResuming(new TusPreferencesURLStore(pref));
-      client.setHeaders(headers);
 
       upload = new TusAndroidUpload(Uri.parse(fileUrl), reactContext);
       upload.setMetadata(metadata);
+
+      Log.d(TAG, "executor created");
 
       shouldFinish = false;
       isRunning = false;
@@ -139,33 +150,32 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
 
     protected void makeAttempt() throws ProtocolException, IOException {
       // uploader = client.resumeOrCreateUpload(upload);
+      // client.setHeaders(updatedHeaders);
+      headers.put("Upload-Offset", String.valueOf(offset));
+      client.setHeaders(headers);
       uploader = client.beginOrResumeUploadFromURL(upload, new URL(uploadEndPoint));
 
-      uploader.setChunkSize(1024);
-      uploader.setRequestPayloadSize(10 * 1024 * 1024);
+      uploader.setChunkSize(2048);
+      uploader.setRequestPayloadSize(2 * 1024 * 1024);
+      Log.d(TAG, "attempt upload " + client.getHeaders());
+
+      progressTicker = new Timer();
+
+      progressTicker.scheduleAtFixedRate(new TimerTask() {
+        @Override
+        public void run() {
+          sendProgressEvent(upload.getSize(), uploader.getOffset());
+          Log.d(TAG, "attempt progress " + uploader.getOffset());
+          offset = uploader.getOffset();
+        }
+      }, 0, 500);
 
       do {
-        long totalBytes = upload.getSize();
-        long bytesUploaded = uploader.getOffset();        
-        sendProgressEvent( totalBytes,bytesUploaded);
+      } while (uploader.uploadChunk() > -1 && !shouldFinish);
 
-      }while(uploader.uploadChunk() > -1 && !shouldFinish);
+      progressTicker.cancel();
+      sendProgressEvent(upload.getSize(), upload.getSize());
 
-      // Timer progressTicker = new Timer();
-
-      // progressTicker.scheduleAtFixedRate(new TimerTask() {
-      //   @Override
-      //   public void run() {
-      //     sendProgressEvent(upload.getSize(), uploader.getOffset());
-      //   }
-      // }, 0, 500);
-
-      // do {
-      // } while (uploader.uploadChunk() > -1 && !shouldFinish);
-
-      // sendProgressEvent(upload.getSize(), upload.getSize());
-
-      // progressTicker.cancel();
       uploader.finish();
     }
 
@@ -201,9 +211,12 @@ public class RNTusClientModule extends ReactContextBaseJavaModule {
         params.putString("uploadUrl", uploadUrl);
         reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(ON_SUCCESS, params);
       } catch (ProtocolException | IOException e) {
+        progressTicker.cancel();
+
         WritableMap params = Arguments.createMap();
         params.putString("uploadId", uploadId);
         params.putString("error", e.toString());
+
         reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(ON_ERROR, params);
       }
       isRunning = false;
